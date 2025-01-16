@@ -1,4 +1,4 @@
-                                                                           <img width="908" alt="image" src="https://github.com/user-attachments/assets/9b8f63f9-5f73-495f-9b85-6f908dfc7501" />
+<img width="908" alt="image" src="https://github.com/user-attachments/assets/9b8f63f9-5f73-495f-9b85-6f908dfc7501" />
 
 ## InsightX: Fraud Detection and Predictive Modeling
 
