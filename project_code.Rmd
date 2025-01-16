@@ -1,0 +1,269 @@
+---
+title: "STAT232_Project"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(kknn)
+library(caret)
+library(class)
+
+data <- read.csv("fraudTrain.csv")
+credit_df <- data
+
+new_credit <- select(credit_df, -X, -first, -last, -street, -trans_num, -unix_time, -cc_num, -zip)
+```
+
+```{r}
+credit_df <- data
+
+new_credit <- select(credit_df, -X, -first, -last, -street, -trans_num, -unix_time, -cc_num, -zip)
+
+new_credit$gender <- as.factor(ifelse(new_credit$gender == "M", 0, 1))
+new_credit$is_fraud <- as.factor(new_credit$is_fraud)
+
+dob_date <- as.Date(new_credit$dob)
+current_date <- Sys.Date()
+
+# Calculate age
+new_credit$age <- as.integer(difftime(current_date, dob_date, units = "weeks") / 52.25)
+credit_new <- select(new_credit, -dob)
+
+set.seed(219) # DO NOT CHANGE, Prof Peter
+selected_df <- credit_new[sample(nrow(new_credit), 10000), ]
+
+selected_df
+```
+```{r}
+selected_df <- selected_df %>%
+  mutate(region = case_when(
+    state %in% c("WA", "OR", "ID", "MT", "WY", "AK", "HI") ~ "Northwest",
+    state %in% c("TX", "LA", "MS", "AL", "GA", "FL", "SC", "NC", "TN", "AR", "OK", "KY") ~ "South",
+    state %in% c("ME", "NH", "VT", "MA", "RI", "CT", "NY", "NJ", "PA", "DE", "MD", "WV", "VA") ~ "East",
+    state %in% c("CA", "NV", "UT", "CO", "AZ", "NM") ~ "West",
+    TRUE ~ "Midwest" # Assuming all other states fall under Midwest category
+  ))
+```
+
+```{r}
+jobs <- c("Production assistant, radio", "Drilling engineer", "Development worker, community", "Information systems manager", "Librarian, academic", "Programmer, multimedia", "Copywriter, advertising", "Tax inspector", "Therapist, music", "Media buyer", "Camera operator", "Production manager", "Hydrologist", "Systems developer", "Chief Strategy Officer", "Psychotherapist", "Horticultural therapist", "Hydrographic surveyor", "Early years teacher", "Musician", "Materials engineer", "Theme park manager", "Toxicologist", "Comptroller", "Engineer, control and instrumentation", "Podiatrist", "Audiological scientist", "Energy manager", "Press sub", "Further education lecturer", "Surveyor, rural practice", "Applications developer", "Public relations account executive", "Chief Technology Officer", "Advertising account planner", "Chemical engineer", "Mechanical engineer", "Press photographer", "Phytotherapist", "Broadcast engineer", "Exhibition designer", "Engineer, drilling", "Fisheries officer", "Corporate investment banker", "Investment banker, corporate", "Fine artist", "Engineer, petroleum", "Training and development officer", "Science writer", "Sports administrator", "Editor, magazine features", "Secretary/administrator", "Glass blower/designer", "Designer, interior/spatial", "Private music teacher", "Telecommunications researcher", "Administrator, local government", "IT trainer", "Radio producer", "Volunteer coordinator", "Warehouse manager", "Energy engineer", "Teacher, secondary school", "Civil engineer, contracting", "Statistician", "Barrister", "Equities trader", "Freight forwarder", "Seismic interpreter", "Prison officer", "Surveyor, land/geomatics", "English as a second language teacher", "Public house manager", "Cytogeneticist", "Lecturer, further education", "Geochemist", "Chief Operating Officer", "Administrator, education", "Set designer", "Market researcher", "Tree surgeon", "Editor, film/video", "Commercial horticulturist", "Insurance underwriter", "Art therapist", "Film/video editor", "Psychotherapist, child", "Psychiatric nurse", "Patent attorney", "Social researcher", "Radiographer, therapeutic", "Lecturer, higher education", "Counsellor", "Water engineer", "Environmental consultant", "Designer, exhibition/display", "Contractor", "Dealer", "Web designer", "Scientist, research (physical sciences)", "Arts development officer", "Biomedical scientist", "Librarian, public", "Sales professional, IT", "Nutritional therapist", "Surgeon", "Engineer, biomedical", "Communications engineer", "Health visitor", "Learning mentor", "Trade mark attorney", "Futures trader", "Child psychotherapist", "Designer, furniture", "Scientist, research (maths)", "Sub", "Surveyor, mining", "Clothing/textile technologist", "Music therapist", "Multimedia programmer", "Magazine features editor", "Research officer, political party", "Quantity surveyor", "Designer, industrial/product", "Artist", "Archaeologist", "Data scientist", "Careers information officer", "Tax adviser", "Land/geomatics surveyor", "Pensions consultant", "Chief Executive Officer", "Paramedic", "Politician's assistant", "Electronics engineer", "Soil scientist", "Occupational therapist", "Research scientist (life sciences)", "Curator", "Immigration officer", "Mining engineer", "Optician, dispensing", "Chartered public finance accountant", "Physiotherapist", "Community arts worker", "Senior tax professional/tax inspector", "Development worker, international aid", "Therapist, sports", "Embryologist, clinical", "Designer, ceramics/pottery", "Cabin crew", "Sport and exercise psychologist", "Educational psychologist", "Health service manager", "Hospital pharmacist", "Therapist, horticultural", "Learning disability nurse", "Dance movement psychotherapist", "Radiographer, diagnostic", "Media planner", "Psychologist, counselling", "Leisure centre manager", "Licensed conveyancer", "Human resources officer", "Engineer, aeronautical")
+
+# Create dataframe
+jobs_df <- data.frame(job_title = jobs, stringsAsFactors = FALSE)
+
+
+```
+
+
+```{r}
+selected_df <- selected_df %>%
+  mutate(job_type = case_when(
+    job %in% c("Drilling engineer", "Information systems manager", "Materials engineer", "Engineer, control and instrumentation", "Audiological scientist", "Energy manager", "Hydrologist", "Systems developer", "Chief Technology Officer", "Chemical engineer", "Mechanical engineer", "Broadcast engineer", "Engineer, drilling", "Surveyor, land/geomatics", "Engineer, petroleum", "Energy engineer", "Civil engineer, contracting", "Structural engineer", "Geologist, wellsite", "Research scientist (physical sciences)", "Geologist, engineering", "Electrical engineer", "Electronics engineer", "Engineer, communications", "Soil scientist", "Mining engineer", "Chief Operating Officer", "Water engineer", "Engineer, manufacturing", "Engineer, automotive", "Operations geologist", "Engineering geologist", "Manufacturing engineer", "Maintenance engineer", "Site engineer", "Engineer, civil (consulting)", "Engineering geologist", "Building services engineer", "Field seismologist", "Field trials officer") ~ "Engineering_Tech",
+    job %in% c("Therapist, music", "Audiological scientist", "Psychotherapist", "Horticultural therapist", "Therapist, sports", "Embryologist, clinical", "Occupational therapist", "Physiotherapist", "Community arts worker", "Radiographer, therapeutic", "Health visitor", "Hospital pharmacist", "Therapist, horticultural", "Learning disability nurse", "Dance movement psychotherapist", "Radiographer, diagnostic", "Educational psychologist") ~ "Healthcare_Med",
+    job %in% c("Early years teacher", "Further education lecturer", "Teacher, secondary school", "English as a second language teacher", "Lecturer, further education", "Lecturer, higher education", "Primary school teacher", "Teacher, primary school", "Special educational needs teacher", "TEFL teacher") ~ "Education_Teaching",
+    job %in% c("Tax inspector", "Comptroller", "Corporate investment banker", "Investment banker, corporate", "Training and development officer", "Chief Strategy Officer", "Freight forwarder", "Equities trader", "Pensions consultant", "Chartered public finance accountant", "Insurance underwriter", "Futures trader", "Senior tax professional/tax inspector", "Financial") ~ "Business_Finance",
+    TRUE ~ "Other" # Assuming all other states fall under Midwest category
+  ))
+```
+
+
+
+```{r}
+library(dplyr)
+# converting categorical to numerical
+selected_df_for_modelling <- select(selected_df, -merchant, -state, -city, -job, -category, -job, -category)
+
+selected_df_for_modelling <- select(selected_df_for_modelling, -trans_date_trans_time)
+
+selected_df_for_modelling$job_type <- as.numeric(factor(selected_df_for_modelling$job_type))
+
+
+selected_df_for_modelling$region <- as.numeric(factor(selected_df_for_modelling$region))
+
+selected_df_for_modelling$age <- as.numeric(selected_df_for_modelling$age)
+selected_df_for_modelling$lat <- as.numeric(selected_df_for_modelling$lat)
+selected_df_for_modelling$long <- as.numeric(selected_df_for_modelling$long)
+selected_df_for_modelling$amt <- as.numeric(selected_df_for_modelling$amt)
+selected_df_for_modelling$gender <- as.numeric(selected_df_for_modelling$gender)
+selected_df_for_modelling$city_pop <- as.numeric(selected_df_for_modelling$city_pop)
+selected_df_for_modelling$merch_lat <- as.numeric(selected_df_for_modelling$merch_lat)
+selected_df_for_modelling$merch_long <- as.numeric(selected_df_for_modelling$merch_long)
+selected_df_for_modelling$region <- as.numeric(selected_df_for_modelling$region)
+selected_df_for_modelling$job_type <- as.numeric(selected_df_for_modelling$job_type)
+selected_df_for_modelling$is_fraud <- as.numeric(selected_df_for_modelling$is_fraud)
+
+```
+
+```{r}
+library(corrplot)
+correlation_matrix <- cor(selected_df_for_modelling)
+
+# Draw correlation heatmap
+corrplot(correlation_matrix)
+```
+
+
+### Logistic Regression
+Here is the first example of regression model using the feature engineering $part 1$ from above
+```{r}
+# selected_df_for_modelling <- selected_df_for_modelling[sample(nrow(selected_df_for_modelling), 1000), ]
+# Logistic Regression model 1
+selected_df_for_modelling$is_fraud <- as.factor(selected_df_for_modelling$is_fraud)
+logistic_model_1 <- glm(is_fraud ~  . -lat -long -merch_lat -merch_long,
+                        data = selected_df_for_modelling,
+                        family = binomial)
+
+# Printing result
+summary(logistic_model_1)
+```
+
+```{r}
+predictions <- predict(logistic_model_1, selected_df_for_modelling, type = "response")
+conf_matrix <- table(selected_df_for_modelling$is_fraud, predictions > 0.5)
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+precision <- conf_matrix[1, 1] / sum(conf_matrix[, 1])
+print(paste("Accuracy:", round(accuracy, 6)))
+print(paste("Precision:", round(precision, 6)))
+```
+
+
+Here is another example of regression model using further feature engineering listed in $part 2$ section of feature engineering
+
+```{r}
+
+# Logistic Regression Model 2
+logistic_model_2 <- glm(is_fraud ~ poly(amt) + gender + age + amt*age + city_pop + region + job_type + gender,
+                        data = selected_df_for_modelling,
+                        family = binomial)
+
+# Printing Result
+summary(logistic_model_2)
+
+```
+
+```{r}
+predictions <- predict(logistic_model_2, selected_df_for_modelling, type = "response")
+conf_matrix <- table(selected_df_for_modelling$is_fraud, predictions > 0.5)
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+precision <- conf_matrix[1, 1] / sum(conf_matrix[, 1])
+print(paste("Accuracy:", round(accuracy, 3)))
+print(paste("Precision:", round(precision, 3)))
+```
+
+
+```{r}
+# Setting seeds for reproductibility
+set.seed(219)
+
+# Setting index for train and test dataset
+index <- createDataPartition(selected_df_for_modelling$is_fraud, p = 0.6, list = FALSE)
+
+train_data <- selected_df_for_modelling[index,]
+test_data <- selected_df_for_modelling[-index,]
+```
+
+```{r}
+# Excluding non-numeric data columns first
+numeric_columns <- sapply(train_data, is.numeric)
+
+# Scale the features
+train_data_scaled <- scale(train_data[, numeric_columns & names(train_data) != "is_fraud"])
+test_data_scaled <- scale(test_data[, numeric_columns & names(test_data) != "is_fraud"], 
+                         center = attr(train_data_scaled, "scaled:center"), 
+                         scale = attr(train_data_scaled, "scaled:scale"))
+
+# Convert scaled data back to data frames
+train_data_scaled <- as.data.frame(train_data_scaled)
+test_data_scaled <- as.data.frame(test_data_scaled)
+
+# Add the target variable back
+train_data_scaled$is_fraud <- train_data$is_fraud
+test_data_scaled$is_fraud <- test_data$is_fraud
+```
+
+```{r}
+# Fit the KNN model
+knn_model <- kknn(is_fraud ~ .,
+                  train_data_scaled,
+                  test_data_scaled,
+                  k = 5,
+                  distance = 1,
+                  kernel = "optimal"
+                  )
+
+# Predictions
+knn_predictions <- fitted(knn_model)
+```
+
+```{r}
+# Convert predictions to factor for confusionMatrix with a 0.5 cutoff point
+knn_predictions <- ifelse(knn_predictions > 0.5, 1, 0)
+knn_predictions <- as.factor(knn_predictions)
+test_data_scaled$is_fraud <- as.factor(test_data_scaled$is_fraud)
+
+# Printing ConfusionMatrix
+confusionMatrix(knn_predictions, test_data_scaled$is_fraud)
+```
+
+Random Forest
+
+```{r}
+library(randomForest)
+library(caret)
+rf_model <- randomForest(is_fraud ~ ., data = selected_df_for_modelling)
+predictions <- predict(rf_model, selected_df_for_modelling)
+conf_matrix <- confusionMatrix(predictions, selected_df_for_modelling$is_fraud)
+accuracy <- conf_matrix$overall["Accuracy"]
+precision <- conf_matrix$byClass["Pos Pred Value"]
+print(paste("Accuracy:", round(accuracy, 4)))
+print(paste("Precision:", round(precision, 4)))
+```
+
+Decision Trees
+
+```{r}
+library(rpart)
+dt_model <- rpart(is_fraud ~ ., data = selected_df_for_modelling, method = "class")
+predictions <- predict(dt_model, data, type = "class")
+conf_matrix <- confusionMatrix(predictions, data$actual_response)
+accuracy <- conf_matrix$overall["Accuracy"]
+precision <- conf_matrix$byClass["Pos Pred Value"]
+print(paste("Accuracy:", round(accuracy, 4)))
+print(paste("Precision:", round(precision, 4)))
+
+```
+
+SVMs
+
+```{r}
+# install.packages("e1071")
+library(e1071)
+svm_model <- svm(is_fraud ~ ., data = selected_df_for_modelling, kernel = "radial")
+predictions <- predict(svm_model, selected_df_for_modelling)
+conf_matrix <- confusionMatrix(predictions, selected_df_for_modelling$is_fraud)
+accuracy <- conf_matrix$overall["Accuracy"]
+precision <- conf_matrix$byClass["Pos Pred Value"]
+print(paste("Accuracy:", round(accuracy, 4)))
+print(paste("Precision:", round(precision, 4)))
+
+```
+
+KNN_NEW_TEST
+
+```{r}
+library(class) # for knn()
+    
+ 
+Default.knn <- selected_df_for_modelling
+Default.knn$default.knn.pred <- knn(train = select(selected_df_for_modelling,balance,income), # training data predictors [matrix cl = Default$default, # training data class labels [vector]
+test = select(Default,balance,income), # test data [matrix/data.frame]
+k = 5) # set K - # of nearest neighbors
+Default.knn
+```
+
+
+```{r}
+
+```
+
