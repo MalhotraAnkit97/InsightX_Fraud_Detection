@@ -1,3 +1,5 @@
+<img width="399" alt="image" src="https://github.com/user-attachments/assets/0704bc89-d9ae-4009-aa15-197ac50bc084" />
+
 ## InsightX: Fraud Detection and Predictive Modeling
 
 This repository hosts the code and analysis for InsightX, a comprehensive project focused on fraud detection through advanced statistical techniques and machine learning models.
